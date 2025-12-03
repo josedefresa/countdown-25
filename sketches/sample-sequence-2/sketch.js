@@ -38,6 +38,10 @@ let startInputX = 0;
 // récupérer l'image insérée dans le HTML
 const maisonsImg = document.getElementById("maisons");
 
+// nouvelle image 1.jpg et numéro de case où la placer
+const img1jpg = document.getElementById("img_1jpg");
+const specialCell = 5; // changer ce numéro pour placer l'image ailleurs
+
 // liste des numéros à remplacer par l'image
 const replaceNums = new Set([
   1, 2, 3, 8, 9, 10, 13, 14, 17, 18, 25, 29, 30, 32, 33, 40,
@@ -149,9 +153,13 @@ function update(dt) {
       const cy = Math.round((r + 0.5) * cellH);
 
       if (replaceNums.has(n) && maisonsImg && maisonsImg.complete) {
-        // dessiner l'image centrée dans la case
+        // dessiner l'image maisons centrée dans la case
         const size = Math.min(cellW, cellH) * MAISON_SCALE; // ajuste la taille si besoin
         ctx.drawImage(maisonsImg, cx - size / 2, cy - size / 2, size, size);
+      } else if (n === specialCell && img1jpg && img1jpg.complete) {
+        // dessiner l'image 1.jpg dans la case choisie
+        const size = Math.min(cellW, cellH) * MAISON_SCALE;
+        ctx.drawImage(img1jpg, cx - size / 2, cy - size / 2, size, size);
       } else {
         const text = String(n);
         ctx.strokeText(text, cx, cy);
