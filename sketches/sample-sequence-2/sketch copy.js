@@ -66,38 +66,38 @@ const roadNums = new Set([
   36, 37, 38, 39,
 ]);
 
-const MAISON_SCALE = 0.9;
+const MAISON_SCALE = 0.8;
 
 const indexTypeMap = {
   1: "maisons", // index 1 -> type maisons
   2: "maisons", // index 2 -> type maisons
-  3: "BD", // index 3 -> type maisons
-  4: "route", // index 4 -> type BD
+  3: "maisons", // index 3 -> type maisons
+  4: "BD", // index 4 -> type BD
   // exemples pour plusieurs "route" (il y a 7 cas, adapte les index)
   5: "route",
-  6: "GB",
-  7: "maisons",
+  6: "route",
+  7: "GB",
   8: "maisons",
   9: "maisons",
-  10: "BD",
-  11: "GH",
-  12: "maisons",
+  10: "maisons",
+  11: "BD",
+  12: "GH",
   13: "maisons",
-  14: "HD",
-  15: "GB",
-  16: "maisons",
+  14: "maisons",
+  15: "HD",
+  16: "GB",
   17: "maisons",
-  18: "tunnel",
-  19: "BD",
-  20: "route",
+  18: "maisons",
+  19: "tunnel",
+  20: "BD",
   21: "route",
   22: "route",
-  23: "GH",
-  24: "maisons",
+  23: "route",
+  24: "GH",
   25: "maisons",
   26: "BD",
-  27: "GH",
-  28: "maisons",
+  27: "route",
+  28: "GH",
   29: "maisons",
   30: "maisons",
   31: "Tunnel2",
@@ -143,127 +143,36 @@ function getCanvasPoint(clientX, clientY) {
   };
 }
 
-// --- nouvelle configuration pour grille carrée ---
-let grid = {
-  cellSize: 0, // taille d'une case en pixels bitmap
-  gridW: 0,
-  gridH: 0,
-  offsetX: 0,
-  offsetY: 0,
-};
-
-function computeGrid() {
-  // canvas.width/height sont en pixels bitmap
-  const maxCellW = Math.floor(canvas.width / COLS);
-  const maxCellH = Math.floor(canvas.height / ROWS);
-  const cellSize = Math.max(1, Math.floor(Math.min(maxCellW, maxCellH)));
-
-  grid.cellSize = cellSize;
-  grid.gridW = cellSize * COLS;
-  grid.gridH = cellSize * ROWS;
-  grid.offsetX = Math.round((canvas.width - grid.gridW) / 2);
-  grid.offsetY = Math.round((canvas.height - grid.gridH) / 2);
-}
-
-// utilitaire mis à jour pour trouver l'index de cellule en tenant compte de l'offset et du cellSize
 function cellIndexFromPoint(px, py) {
-  // s'assurer que la grille est calculée
-  if (!grid.cellSize) computeGrid();
-
-  const xRel = px - grid.offsetX;
-  const yRel = py - grid.offsetY;
-  if (xRel < 0 || yRel < 0) return null;
-  if (xRel >= grid.gridW || yRel >= grid.gridH) return null;
-
-  const c = Math.floor(xRel / grid.cellSize);
-  const r = Math.floor(yRel / grid.cellSize);
+  const cellW = canvas.width / COLS;
+  const cellH = canvas.height / ROWS;
+  const c = Math.floor(px / cellW);
+  const r = Math.floor(py / cellH);
   if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return null;
   return r * COLS + c + 1; // 1-based
 }
 
-// helper : set des clés images de type "route" draggables
-const draggableImageKeys = new Set([
-  "route",
-  "routev2",
-  "GB",
-  "GH",
-  "BD",
-  "BDv2",
-  "HD",
-  "HB",
-  "tunnel",
-  "Tunnel2",
-  "tunnel2",
-]);
-
-function getImgElementForKey(key) {
-  switch (key) {
-    case "maisons":
-      return maisonsImg;
-    case "BD":
-      return BD;
-    case "BDv2":
-    case "routeBDv2":
-      return BD2;
-    case "GH":
-      return GH;
-    case "GB":
-      return GB;
-    case "HB":
-      return HB;
-    case "HD":
-      return HD;
-    case "tunnel":
-      return tunnel;
-    case "Tunnel2":
-    case "tunnel2":
-      return tunnel2;
-    case "route":
-      return document.getElementById("route") || null;
-    case "routev2":
-      return document.getElementById("routev2") || null;
-    default:
-      return document.getElementById(key) || null;
-  }
-}
-
-// pointer events : maintenant on permet le drag des images "route" (pas des maisons)
+// pointer events for dragging
 canvas.addEventListener("pointerdown", (e) => {
   const p = getCanvasPoint(e.clientX, e.clientY);
   const idx = cellIndexFromPoint(p.x, p.y);
   if (!idx) return;
   const cell = cellContent[idx];
-  if (!cell) return;
-
-  // empêcher drag des maisons / cases non-draggables
-  if (cell.type === "image" && cell.img === "maisons") return;
-
-  // autoriser uniquement les images de type route (et similaires)
-  if (cell.type === "image" && draggableImageKeys.has(cell.img)) {
-    e.preventDefault();
-    canvas.setPointerCapture(e.pointerId);
-    const rect = canvas.getBoundingClientRect();
-    // stocker l'original et vider la source pour éviter duplication
-    const orig = { ...cellContent[idx] };
-    cellContent[idx] = { type: "empty", originalIndex: orig.originalIndex };
-
-    dragging = {
-      kind: "image",
-      img: orig.img,
-      index: idx,
-      originalCellData: orig,
-      pointerId: e.pointerId,
-      // offsets pour position relative si besoin (en bitmap coords)
-      offsetX: p.x - (((idx - 1) % COLS) + 0.5) * (canvas.width / COLS),
-      offsetY:
-        p.y - (Math.floor((idx - 1) / COLS) + 0.5) * (canvas.height / ROWS),
-    };
-    dragPos.x = p.x;
-    dragPos.y = p.y;
-    return;
-  }
-
-  // (optionnel) si tu veux drag des nombres à la place, ajoute la logique ici.
+  if (!cell || cell.type !== "image") return; // only numbers draggable
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  // start drag
+  dragging = {
+    index: idx,
+    value: cell.value,
+    pointerId: e.pointerId,
+    offsetX: p.x - (((idx - 1) % COLS) + 0.5) * (canvas.width / COLS),
+    offsetY:
+      p.y - (Math.floor((idx - 1) / COLS) + 0.5) * (canvas.height / ROWS),
+  };
+  // visually remove from its cell until drop (we'll not draw it in its cell while dragging)
+  dragPos.x = p.x;
+  dragPos.y = p.y;
 });
 
 canvas.addEventListener("pointermove", (e) => {
@@ -277,62 +186,25 @@ canvas.addEventListener("pointerup", (e) => {
   if (!dragging || dragging.pointerId !== e.pointerId) return;
   const p = getCanvasPoint(e.clientX, e.clientY);
   const targetIdx = cellIndexFromPoint(p.x, p.y);
-
-  if (dragging.kind === "image") {
-    // drop rules :
-    // - can't drop on house cells
-    // - if target is image -> swap
-    // - if target is number/empty -> move image there
-    // - else restore original
-    if (!targetIdx || indexTypeMap[targetIdx] === "maisons") {
-      // invalid -> restore
-      cellContent[dragging.index] = { ...dragging.originalCellData };
-    } else {
-      const targetCell = cellContent[targetIdx];
-      if (targetCell && targetCell.type === "image") {
-        // swap : place dragged image into target, place target image back to source
-        const temp = { ...targetCell };
-        cellContent[targetIdx] = {
-          type: "image",
-          img: dragging.img,
-          originalIndex: targetIdx,
-        };
-        cellContent[dragging.index] = temp;
-      } else {
-        // move into number/empty -> image occupies target, source stays empty
-        // special rule preserved: if dragged image is routev2 and target is not in original routev2 cells,
-        // convert to "route" (fallback)
-        let finalImgKey = dragging.img;
-        if (
-          dragging.img === "routev2" &&
-          !Object.keys(indexTypeMap).some(
-            (k) =>
-              Number(k) === targetIdx && indexTypeMap[targetIdx] === "routev2"
-          )
-        ) {
-          finalImgKey = "route";
-        }
-        cellContent[targetIdx] = {
-          type: "image",
-          img: finalImgKey,
-          originalIndex: targetIdx,
-        };
-        // source already emptied at pointerdown
-      }
-    }
+  // attempt swap only with other number cells
+  if (
+    targetIdx &&
+    targetIdx !== dragging.index &&
+    cellContent[targetIdx].type === "number"
+  ) {
+    // swap values
+    const tmp = cellContent[targetIdx].value;
+    cellContent[targetIdx].value = dragging.value;
+    cellContent[dragging.index].value = tmp;
+  } else {
+    // snap back (no change)
   }
-
   canvas.releasePointerCapture(e.pointerId);
   dragging = null;
 });
 
 canvas.addEventListener("pointercancel", (e) => {
   if (!dragging) return;
-  // restore original cell content on cancel
-  const orig = dragging.originalCellData;
-  if (orig) {
-    cellContent[dragging.index] = { ...orig };
-  }
   dragging = null;
 });
 
@@ -382,7 +254,7 @@ function update(dt) {
     currentState = nextState;
     switch (currentState) {
       case State.Finished:
-        //finish();
+        finish();
         break;
       case State.Falling:
         scaleSpring.target = 1.2;
@@ -390,68 +262,62 @@ function update(dt) {
     }
   }
 
-  // recalculer grille (utile si canvas resized)
-  computeGrid();
-
-  // fond noir (utilise bitmap dimensions)
+  // fond noir (utilise bitmap dimensions comme le reste du fichier)
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // ---------- GRILLE carrée ----------
+  // ---------- GRILLE 8x5 BLANCHE ----------
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   ctx.fillStyle = "white";
-
-  // verticales centrées dans la zone de la grille
+  // verticales
   for (let i = 0; i <= COLS; i++) {
-    let X = grid.offsetX + i * grid.cellSize;
-    // clamp
+    let X = Math.round((i * canvas.width) / COLS);
     if (X < 0) X = 0;
     if (X >= canvas.width) X = canvas.width - 1;
-    ctx.fillRect(Math.round(X), 0, 1, canvas.height);
+    ctx.fillRect(X, 0, 1, canvas.height);
   }
   // horizontales
   for (let j = 0; j <= ROWS; j++) {
-    let Y = grid.offsetY + j * grid.cellSize;
+    let Y = Math.round((j * canvas.height) / ROWS);
     if (Y < 0) Y = 0;
     if (Y >= canvas.height) Y = canvas.height - 1;
-    ctx.fillRect(0, Math.round(Y), canvas.width, 1);
+    ctx.fillRect(0, Y, canvas.width, 1);
   }
 
-  // Numérotation / images — utiliser grid.cellSize et offsets pour centres
-  const cellSize = grid.cellSize;
+  // Numérotation / images
+  const cellW = canvas.width / COLS;
+  const cellH = canvas.height / ROWS;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
-  const fontSize = Math.max(12, Math.floor(Math.min(cellSize) * 0.25));
+  const fontSize = Math.max(12, Math.floor(Math.min(cellW, cellH) * 0.25));
   ctx.font = `${fontSize}px sans-serif`;
+
+  const strokeW = Math.max(1, Math.floor(fontSize * 0.12));
+  ctx.lineWidth = strokeW;
 
   let n = 1;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const cx = Math.round(grid.offsetX + (c + 0.5) * cellSize);
-      const cy = Math.round(grid.offsetY + (r + 0.5) * cellSize);
+      const cx = Math.round((c + 0.5) * cellW);
+      const cy = Math.round((r + 0.5) * cellH);
 
       const cell = cellContent[n];
 
-      // si on drag depuis cette case et que c'était un nombre, on ne redessine pas la valeur (ghost dessiné plus bas)
+      // if dragging this index, skip drawing it in place (we'll draw the ghost later)
       if (dragging && dragging.index === n && cell && cell.type === "number") {
         n++;
         continue;
       }
 
-      // gérer explicitement les cellules vides => ne rien dessiner
-      if (!cell || cell.type === "empty") {
-        n++;
-        continue;
-      }
-
       if (cell.type === "image") {
-        // dessiner l'image correspondant à cell.img
-        const size = Math.max(1, Math.floor(cellSize * MAISON_SCALE));
+        // dessiner l'image correspondant à cell.img (indexTypeMap)
+        const size = Math.min(cellW, cellH) * MAISON_SCALE;
         const key = String(cell.img);
 
+        // récupérer l'élément <img> correspondant (fallback direct via document)
         let imgEl = null;
         switch (key) {
           case "maisons":
@@ -490,43 +356,50 @@ function update(dt) {
             imgEl = document.getElementById("routev2") || null;
             break;
           default:
+            // si clé personnalisée, tenter de récupérer un <img id="...">
             imgEl = document.getElementById(key) || null;
         }
 
         if (imgEl && imgEl.complete) {
           ctx.drawImage(imgEl, cx - size / 2, cy - size / 2, size, size);
         } else {
+          // fallback lisible : afficher la clé au centre
           ctx.fillStyle = "white";
           ctx.fillText(key, cx, cy);
         }
-      } else if (cell.type === "number") {
+      } else {
         // couleur : verte si le numéro est à sa place d'origine
         const isHome = cell.value === cell.originalIndex;
         ctx.fillStyle = isHome ? "green" : "white";
+        ctx.strokeStyle = "black";
+
+        // Afficher des images ici
+        ctx.strokeText(String(cell.value), cx, cy);
         ctx.fillText(String(cell.value), cx, cy);
       }
       n++;
     }
   }
 
-  // draw dragging ghost on top (utiliser cellSize pour taille)
-  if (dragging && dragging.kind === "image") {
+  // draw dragging ghost on top
+  if (dragging) {
+    // pointer position in bitmap coords dragPos.x/y
     const gx = dragPos.x;
     const gy = dragPos.y;
-    const size = Math.max(1, Math.floor(cellSize * 0.6));
-    const imgEl = getImgElementForKey(dragging.img);
-    if (imgEl && imgEl.complete) {
-      ctx.drawImage(imgEl, gx - size / 2, gy - size / 2, size, size);
-    } else {
-      // fallback text if image not loaded
-      ctx.save();
-      ctx.font = `${Math.max(12, Math.round(fontSize * 1.2))}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "white";
-      ctx.fillText(dragging.img, gx, gy);
-      ctx.restore();
-    }
+
+    // taille de la police pour le ghost (légèrement plus grande)
+    const ghostFontSize = Math.max(12, Math.round(fontSize * 1.2));
+
+    ctx.save();
+    ctx.font = `${ghostFontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // uniquement texte rempli — plus de contour/stroke
+    ctx.fillStyle = "white";
+    ctx.fillText(String(dragging.value), gx, gy);
+
+    ctx.restore();
   }
 
   ctx.restore();
