@@ -10,15 +10,26 @@ physics.gravityY = 2000;
 
 const dragManager = new DragManager();
 
+// Paramètres de longueur de chaîne
+const CHAIN_LENGTH_PX = 600; // longueur verticale totale en pixels
+const CHAIN_OFFSET_X = 40; // décalage horizontal (remplace le "+ 40")
+const LINK_LENGTH_PX = 40; // longueur moyenne d’un maillon
+const CHAIN_SEGMENTS = Math.max(
+  2,
+  Math.round(CHAIN_LENGTH_PX / LINK_LENGTH_PX)
+);
+
 // CHAIN
+const startX = canvas.width / 2;
+const startY = 0;
+
 const chain = physics.createChain({
-  startPositionX: canvas.width / 2,
-  startPositionY: 0,
-  endPositionX: canvas.width / 2 + 40,
-  endPositionY: canvas.height / 2,
-  elementCount: 16,
+  startPositionX: startX,
+  startPositionY: startY,
+  endPositionX: startX + CHAIN_OFFSET_X,
+  endPositionY: startY + CHAIN_LENGTH_PX,
+  elementCount: CHAIN_SEGMENTS,
   linkOptions: {
-    //mode: VerletMode.Pull,
     stiffness: 1,
   },
   bodyOptions: {
@@ -67,6 +78,28 @@ function update(deltaTime) {
   const lastBody = chain.bodies[chain.bodies.length - 1];
   ctx.lineTo(lastBody.positionX, lastBody.positionY);
   ctx.stroke();
+
+  // --- rectangle au bout du fil (top-center fixé, sans rotation) ---
+  {
+    const rectW = 40; // largeur du rectangle
+    const rectH = 80; // hauteur du rectangle
+
+    // positionner le rectangle de sorte que son bord supérieur soit au dernier maillon
+    const rx = lastBody.positionX - rectW / 2;
+    const ry = lastBody.positionY; // bord supérieur = point d'ancrage
+
+    ctx.fillStyle = "white";
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 4;
+    ctx.fillRect(rx, ry, rectW, rectH);
+    ctx.strokeRect(rx, ry, rectW, rectH);
+
+    // petit point d'ancrage visible au top-center
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc(lastBody.positionX, lastBody.positionY, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   // debug visualization
   //physics.displayDebug()
