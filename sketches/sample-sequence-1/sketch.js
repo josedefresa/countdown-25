@@ -6,7 +6,7 @@ const { renderer, input, math, run, finish } = createEngine();
 const { ctx, canvas } = renderer;
 
 const physics = new VerletPhysics();
-physics.gravityY = 2000;
+physics.gravityY = 1000;
 
 const dragManager = new DragManager();
 
@@ -61,18 +61,32 @@ const rectDragTarget = {
   },
 };
 
+// --- créer d'abord le drag object du rectangle (priorité dans l'ordre d'enregistrement) ---
+dragManager.createDragObject({
+  target: rectDragTarget,
+  // utiliser le nom attendu par DragManager
+  isOverlapping: (x, y) => rectDragTarget.contains(x, y),
+  onStartDrag: () => {
+    rectDragging = true;
+    console.log("Started dragging rectangle");
+    chain.bodies[chain.bodies.length - 1].isFixed = true;
+  },
+  onStopDrag: () => {
+    rectDragging = false;
+    chain.bodies[chain.bodies.length - 1].isFixed = false;
+  },
+});
+
 // hit margin pour éviter le flicker quand on frôle le bord
 const RECT_HIT_MARGIN = 6;
 
-// --- création des drag objects pour les maillons : ajouter un hitTest priorisant le rectangle ---
+// --- création des drag objects pour les maillons : utiliser isOverlapping et refuser si pointer dans le rectangle ---
 for (const o of chain.bodies) {
   dragManager.createDragObject({
     target: o,
-    // n'autorise pas le drag du maillon si le pointeur est dans la zone du rectangle
-    hitTest: (x, y) => {
-      // x,y fournis par dragManager sont en coords canvas (voir update() ci‑dessous)
+    // isOverlapping remplace hitTest pour la compatibilité avec DragManager
+    isOverlapping: (x, y) => {
       if (rectDragTarget && rectDragTarget.contains) {
-        // utiliser une marge pour stabiliser le hit test
         const left = rectDragTarget.positionX - rectW / 2 - RECT_HIT_MARGIN;
         const top = rectDragTarget.positionY - rectH / 2 - RECT_HIT_MARGIN;
         if (
@@ -97,23 +111,6 @@ for (const o of chain.bodies) {
     },
   });
 }
-
-// créer un drag object pour la cible du rectangle
-dragManager.createDragObject({
-  target: rectDragTarget,
-  // certains DragManager attendent un hitTest séparé ; on le fournit au cas où
-  hitTest: (x, y) => rectDragTarget.contains(x, y),
-  onStartDrag: () => {
-    rectDragging = true;
-    console.log("Started dragging rectangle");
-    // verrouiller temporairement le dernier maillon pour éviter la physique qui l'écrase
-    chain.bodies[chain.bodies.length - 1].isFixed = true;
-  },
-  onStopDrag: () => {
-    rectDragging = false;
-    chain.bodies[chain.bodies.length - 1].isFixed = false;
-  },
-});
 
 run(update);
 
@@ -144,6 +141,12 @@ function update(deltaTime) {
   if (!looksLikeBitmap) {
     px = (inX - rect.left) * (canvas.width / rect.width);
     py = (inY - rect.top) * (canvas.height / rect.height);
+  }
+
+  // IMPORTANT: mettre à jour la position de la target du rectangle AVANT le hit test
+  if (!rectDragging) {
+    rectDragTarget.positionX = lastBody.positionX;
+    rectDragTarget.positionY = lastBody.positionY + rectH / 2;
   }
 
   // passer les coords converties au dragManager (hit tests utilisent ces mêmes coords)
