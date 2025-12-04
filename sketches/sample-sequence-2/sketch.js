@@ -336,6 +336,219 @@ canvas.addEventListener("pointercancel", (e) => {
   dragging = null;
 });
 
+// ---- Remplacement : initialisation des cellules + shuffle des routes/tunnels ----
+
+// clés considérées comme "route/tunnel" (déplaçables et swappables)
+const movableKeys = new Set([
+  "route",
+  "GB",
+  "GH",
+  "BD",
+  "HD",
+  "tunnel",
+  "Tunnel2",
+]);
+
+// map pour conversion en v2 quand l'image arrive à sa place finale
+const toV2 = {
+  route: "routev2",
+  BD: "BDv2",
+  GB: "GBv2",
+  GH: "GHv2",
+  HD: "HDv2",
+  tunnel: "tunnelv2",
+  Tunnel2: "tunnel2v2",
+};
+
+// construire la liste des indices finaux (indexTypeMap) qui sont movables
+const movableIndices = [];
+const movableTypes = [];
+for (let i = 1; i <= TOTAL; i++) {
+  const t = indexTypeMap[i];
+  if (t && movableKeys.has(t)) {
+    movableIndices.push(i);
+    movableTypes.push(t);
+  }
+}
+
+// shuffle simple Fisher–Yates pour mélanger les images initiales
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const tmp = array[i];
+    array[i] = array[j];
+    array[j] = tmp;
+  }
+  return array;
+}
+const shuffledTypes = shuffle(movableTypes.slice());
+
+// initialiser cellContent : maisons restent, cases movables reçoivent un type mélangé,
+// autres indices deviennent des nombres (draggables si tu veux)
+for (let i = 1; i <= TOTAL; i++) {
+  const finalType = indexTypeMap[i] || null;
+  if (finalType === "maisons") {
+    // maison : immobile, image 'maisons', locked
+    cellContent[i] = {
+      type: "image",
+      img: "maisons",
+      finalType: finalType,
+      locked: true,
+      originalIndex: i,
+    };
+  } else if (movableIndices.indexOf(i) !== -1) {
+    // distribuer une image mélangée (version non-v2)
+    const assigned = shuffledTypes.shift();
+    cellContent[i] = {
+      type: "image",
+      img: assigned,
+      finalType: finalType,
+      locked: false,
+      originalIndex: i,
+    };
+  } else {
+    // case numérique par défaut
+    cellContent[i] = { type: "number", value: i, originalIndex: i };
+  }
+}
+
+// ---- Remplacement : pointer handlers pour respecter verrouillage et conversion v2 ----
+
+// pointerdown : autoriser drag seulement sur images non-locked et appartenant au set movableKeys
+canvas.addEventListener("pointerdown", (e) => {
+  const p = getCanvasPoint(e.clientX, e.clientY);
+  const idx = cellIndexFromPoint(p.x, p.y);
+  if (!idx) return;
+  const cell = cellContent[idx];
+  if (!cell) return;
+
+  // maisons ou locked => non draggable
+  if (cell.type === "image" && (cell.img === "maisons" || cell.locked)) return;
+
+  // n'autorise que les images de type "movableKeys"
+  if (cell.type === "image" && movableKeys.has(cell.img)) {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+
+    // sauvegarder l'original et vider la source pour éviter duplication visuelle
+    const orig = { ...cellContent[idx] };
+    cellContent[idx] = { type: "empty", originalIndex: orig.originalIndex };
+
+    dragging = {
+      kind: "image",
+      img: orig.img, // ex: "route" ou "GH", etc.
+      index: idx,
+      originalCellData: orig,
+      pointerId: e.pointerId,
+      locked: !!orig.locked,
+      offsetX:
+        p.x - (grid.offsetX + (((idx - 1) % COLS) + 0.5) * grid.cellSize),
+      offsetY:
+        p.y -
+        (grid.offsetY + (Math.floor((idx - 1) / COLS) + 0.5) * grid.cellSize),
+    };
+    dragPos.x = p.x;
+    dragPos.y = p.y;
+    return;
+  }
+
+  // autres cas non draggables pour l'instant
+});
+
+// pointermove : mise à jour de la position du ghost
+canvas.addEventListener("pointermove", (e) => {
+  if (!dragging || dragging.pointerId !== e.pointerId) return;
+  const p = getCanvasPoint(e.clientX, e.clientY);
+  dragPos.x = p.x;
+  dragPos.y = p.y;
+});
+
+// pointerup : règles de drop
+canvas.addEventListener("pointerup", (e) => {
+  if (!dragging || dragging.pointerId !== e.pointerId) return;
+  const p = getCanvasPoint(e.clientX, e.clientY);
+  const targetIdx = cellIndexFromPoint(p.x, p.y);
+
+  if (dragging.kind === "image") {
+    // invalid drop -> restore original
+    if (!targetIdx) {
+      cellContent[dragging.index] = { ...dragging.originalCellData };
+    } else {
+      // can't drop on maison or on locked cell
+      const targetFinalType = indexTypeMap[targetIdx];
+      const targetCell = cellContent[targetIdx];
+
+      if (targetFinalType === "maisons" || (targetCell && targetCell.locked)) {
+        // restore
+        cellContent[dragging.index] = { ...dragging.originalCellData };
+      } else if (
+        targetCell &&
+        targetCell.type === "image" &&
+        !targetCell.locked
+      ) {
+        // swap images: target gets dragged img, source gets target img (preserving finalType)
+        const temp = { ...targetCell };
+        cellContent[targetIdx] = {
+          type: "image",
+          img: dragging.img,
+          finalType: targetCell.finalType || indexTypeMap[targetIdx],
+          locked: false,
+          originalIndex: targetIdx,
+        };
+        // place previous target image back at source (and keep its locked state)
+        cellContent[dragging.index] = {
+          ...temp,
+          originalIndex: dragging.index,
+        };
+        // after placing into targetIdx, check if it matches final => convert to v2/lock if so
+        const placedKey = cellContent[targetIdx].img;
+        if (indexTypeMap[targetIdx] && placedKey === indexTypeMap[targetIdx]) {
+          const v2 = toV2[placedKey] || placedKey + "v2";
+          cellContent[targetIdx].img = v2;
+          cellContent[targetIdx].locked = true;
+        }
+      } else {
+        // target is number / empty -> move dragged image into target
+        // special rule : if dragged img placed into index whose final type is different, but dragged image is routev2 (shouldn't happen),
+        // we convert accordingly. Here dragged images are base types (not v2). After placement, if it matches final expected type, convert to v2 and lock.
+        let finalImgKey = dragging.img;
+        cellContent[targetIdx] = {
+          type: "image",
+          img: finalImgKey,
+          finalType: indexTypeMap[targetIdx] || null,
+          locked: false,
+          originalIndex: targetIdx,
+        };
+
+        // check if placed at its final index -> convert to v2 and lock
+        if (
+          indexTypeMap[targetIdx] &&
+          finalImgKey === indexTypeMap[targetIdx]
+        ) {
+          const v2 = toV2[finalImgKey] || finalImgKey + "v2";
+          cellContent[targetIdx].img = v2;
+          cellContent[targetIdx].locked = true;
+        }
+
+        // source already emptied earlier
+      }
+    }
+  }
+
+  canvas.releasePointerCapture(e.pointerId);
+  dragging = null;
+});
+
+// pointercancel : restaurer en cas d'annulation
+canvas.addEventListener("pointercancel", (e) => {
+  if (!dragging) return;
+  const orig = dragging.originalCellData;
+  if (orig) {
+    cellContent[dragging.index] = { ...orig };
+  }
+  dragging = null;
+});
+
 // --- update / drawing ---
 function update(dt) {
   let nextState = undefined;
