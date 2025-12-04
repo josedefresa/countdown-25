@@ -66,7 +66,7 @@ const roadNums = new Set([
   36, 37, 38, 39,
 ]);
 
-const MAISON_SCALE = 0.9;
+const MAISON_SCALE = 1;
 
 // REMPLACER indexTypeMap avec des clés cohérentes (utilise les id HTML)
 const indexTypeMap = {
@@ -529,29 +529,27 @@ function update(dt) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-  ctx.fillStyle = "white";
-
-  // verticales centrées dans la zone de la grille
-  for (let i = 0; i <= COLS; i++) {
-    let X = grid.offsetX + i * grid.cellSize;
-    // clamp
-    if (X < 0) X = 0;
-    if (X >= canvas.width) X = canvas.width - 1;
-    ctx.fillRect(Math.round(X), 0, 1, canvas.height);
-  }
-  // horizontales
-  for (let j = 0; j <= ROWS; j++) {
-    let Y = grid.offsetY + j * grid.cellSize;
-    if (Y < 0) Y = 0;
-    if (Y >= canvas.height) Y = canvas.height - 1;
-    ctx.fillRect(0, Math.round(Y), canvas.width, 1);
-  }
+  // SUPPRESSION de l'affichage des lignes de grille
+  // ctx.fillStyle = "white";
+  // // verticales centrées dans la zone de la grille
+  // for (let i = 0; i <= COLS; i++) {
+  //   let X = grid.offsetX + i * grid.cellSize;
+  //   if (X < 0) X = 0;
+  //   if (X >= canvas.width) X = canvas.width - 1;
+  //   ctx.fillRect(Math.round(X), 0, 1, canvas.height);
+  // }
+  // // horizontales
+  // for (let j = 0; j <= ROWS; j++) {
+  //   let Y = grid.offsetY + j * grid.cellSize;
+  //   if (Y < 0) Y = 0;
+  //   if (Y >= canvas.height) Y = canvas.height - 1;
+  //   ctx.fillRect(0, Math.round(Y), canvas.width, 1);
+  // }
 
   // Numérotation / images — utiliser grid.cellSize et offsets pour centres
   const cellSize = grid.cellSize;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-
   const fontSize = Math.max(12, Math.floor(Math.min(cellSize) * 0.25));
   ctx.font = `${fontSize}px sans-serif`;
 
