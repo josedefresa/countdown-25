@@ -197,9 +197,15 @@ function convertIfFinal(idx) {
   if (!cell || cell.type !== "image") return;
   const finalType = cell.finalType;
   if (!finalType) return;
-  // si l'image posée correspond au type final attendu -> passer en v2 et verrouiller
-  if (cell.img === finalType) {
-    const v2 = toV2[cell.img] || cell.img + "v2";
+
+  // base sans suffixe v2
+  const base = cell.img.endsWith("v2") ? cell.img.slice(0, -2) : cell.img;
+
+  // ne convertir que les routes/tunnels (pas les maisons)
+  if (!movableKeys.has(base)) return;
+
+  if (base === finalType) {
+    const v2 = toV2[base] || base + "v2";
     cell.img = v2;
     cell.locked = true;
   }
@@ -224,34 +230,35 @@ function getImgElementForKey(key) {
   switch (key) {
     case "maisons":
       return maisonsImg;
-    case "routeBD":
-      return BD;
-    case "routeBDv2":
-      return BD2;
-    case "routeGH":
-      return GH;
-    case "routeGHv2":
-      return document.getElementById("routeGHv2") || GH;
-    case "routeGB":
-      return GB;
-    case "routeGBv2":
-      return document.getElementById("routeGBv2") || GB;
-    case "routeHD":
-      return HD;
-    case "routeHDv2":
-      return document.getElementById("routeHDv2") || HD;
-    case "tunnel":
-      return tunnel;
-    case "tunnelv2":
-      return document.getElementById("tunnelv2") || tunnel;
-    case "tunnel2":
-      return tunnel2;
-    case "tunnel2v2":
-      return document.getElementById("tunnel2v2") || tunnel2;
     case "route":
-      return document.getElementById("route") || null;
+      return document.getElementById("route");
     case "routev2":
-      return document.getElementById("routev2") || null;
+      return document.getElementById("routev2");
+    case "routeBD":
+      return document.getElementById("routeBD");
+    case "routeBDv2":
+      return document.getElementById("routeBDv2");
+    case "routeGB":
+      return document.getElementById("routeGB");
+    case "routeGBv2":
+      return document.getElementById("routeGBv2");
+    case "routeGH":
+      return document.getElementById("routeGH");
+    // si ton id réel est “route.GHv2”, remplace ci-dessous par getElementById("route.GHv2")
+    case "routeGHv2":
+      return document.getElementById("routeGHv2");
+    case "routeHD":
+      return document.getElementById("routeHD");
+    case "routeHDv2":
+      return document.getElementById("routeHDv2");
+    case "tunnel":
+      return document.getElementById("tunnel");
+    case "tunnelv2":
+      return document.getElementById("tunnelv2");
+    case "tunnel2":
+      return document.getElementById("tunnel2");
+    case "tunnel2v2":
+      return document.getElementById("tunnel2v2");
     default:
       return document.getElementById(key) || null;
   }
@@ -328,29 +335,26 @@ canvas.addEventListener("pointerup", (e) => {
         targetCell.type === "image" &&
         !targetCell.locked
       ) {
-        // swap images : échanger complètement les deux cellules
         const temp = { ...targetCell };
         const dragged = { ...dragging.originalCellData };
 
-        // place l'image draggée dans la target
         cellContent[targetIdx] = {
           type: "image",
-          img: dragging.img,
-          finalType: indexTypeMap[targetIdx] || temp.finalType,
+          img: dragged.img,
+          finalType: indexTypeMap[targetIdx] || temp.finalType || null,
           locked: false,
-          originalIndex: targetIdx, // index de grille (pas originalIndex de l'image)
+          originalIndex: targetIdx,
         };
 
-        // place l'image qui était en target dans la source
         cellContent[dragging.index] = {
           type: "image",
           img: temp.img,
-          finalType: indexTypeMap[dragging.index] || dragged.finalType,
+          finalType: indexTypeMap[dragging.index] || dragged.finalType || null,
           locked: !!temp.locked,
-          originalIndex: dragging.index, // index de grille (pas originalIndex de l'image)
+          originalIndex: dragging.index,
         };
 
-        // convertir en v2 et verrouiller si posés à leur index final
+        // convertir/locker les deux cases impliquées
         convertIfFinal(targetIdx);
         convertIfFinal(dragging.index);
       } else {
@@ -412,7 +416,6 @@ const shuffledTypes = shuffle(movableTypes.slice());
 for (let i = 1; i <= TOTAL; i++) {
   const finalType = indexTypeMap[i] || null;
   if (finalType === "maisons") {
-    // maison : immobile, image 'maisons', locked
     cellContent[i] = {
       type: "image",
       img: "maisons",
@@ -421,7 +424,6 @@ for (let i = 1; i <= TOTAL; i++) {
       originalIndex: i,
     };
   } else if (movableIndices.indexOf(i) !== -1) {
-    // distribuer une image mélangée (version non-v2)
     const assigned = shuffledTypes.shift();
     cellContent[i] = {
       type: "image",
@@ -431,8 +433,34 @@ for (let i = 1; i <= TOTAL; i++) {
       originalIndex: i,
     };
   } else {
-    // case numérique par défaut
     cellContent[i] = { type: "number", value: i, originalIndex: i };
+  }
+}
+
+// CONVERSION INITIALE: si une image de route/tunnel est déjà à sa case finale, passer en v2 et locker
+for (let i = 1; i <= TOTAL; i++) {
+  const cell = cellContent[i];
+  if (!cell || cell.type !== "image") continue;
+  const expected = cell.finalType;
+  if (!expected) continue;
+
+  const base = cell.img.endsWith("v2") ? cell.img.slice(0, -2) : cell.img;
+
+  // ne convertir que les routes/tunnels (pas les maisons)
+  if (!movableKeys.has(base)) continue;
+
+  if (base === expected) {
+    const v2Map = {
+      route: "routev2",
+      routeBD: "routeBDv2",
+      routeGB: "routeGBv2",
+      routeGH: "routeGHv2",
+      routeHD: "routeHDv2",
+      tunnel: "tunnelv2",
+      tunnel2: "tunnel2v2",
+    };
+    cell.img = v2Map[base] || base + "v2";
+    cell.locked = true;
   }
 }
 
@@ -548,54 +576,16 @@ function update(dt) {
       }
 
       if (cell.type === "image") {
-        // dessiner l'image correspondant à cell.img
         const size = Math.max(1, Math.floor(cellSize * MAISON_SCALE));
         const key = String(cell.img);
 
-        let imgEl = null;
-        switch (key) {
-          case "maisons":
-            imgEl = maisonsImg;
-            break;
-          case "BD":
-            imgEl = BD;
-            break;
-          case "BDv2":
-          case "routeBDv2":
-            imgEl = BD2;
-            break;
-          case "GH":
-            imgEl = GH;
-            break;
-          case "GB":
-            imgEl = GB;
-            break;
-          case "HB":
-            imgEl = HB;
-            break;
-          case "HD":
-            imgEl = HD;
-            break;
-          case "tunnel":
-            imgEl = tunnel;
-            break;
-          case "Tunnel2":
-          case "tunnel2":
-            imgEl = tunnel2;
-            break;
-          case "route":
-            imgEl = document.getElementById("route") || null;
-            break;
-          case "routev2":
-            imgEl = document.getElementById("routev2") || null;
-            break;
-          default:
-            imgEl = document.getElementById(key) || null;
-        }
+        // unifier via getImgElementForKey
+        const imgEl = getImgElementForKey(key);
 
-        if (imgEl && imgEl.complete) {
+        if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
           ctx.drawImage(imgEl, cx - size / 2, cy - size / 2, size, size);
         } else {
+          // fallback non destructif
           ctx.fillStyle = "white";
           ctx.fillText(key, cx, cy);
         }
@@ -614,18 +604,12 @@ function update(dt) {
     const gx = dragPos.x;
     const gy = dragPos.y;
     const size = Math.max(1, Math.floor(cellSize * 0.6));
-    const imgEl = getImgElementForKey(dragging.img);
-    if (imgEl && imgEl.complete) {
-      ctx.drawImage(imgEl, gx - size / 2, gy - size / 2, size, size);
+    const ghostImg = getImgElementForKey(dragging.img);
+    if (ghostImg && ghostImg.complete && ghostImg.naturalWidth > 0) {
+      ctx.drawImage(ghostImg, gx - size / 2, gy - size / 2, size, size);
     } else {
-      // fallback text if image not loaded
-      ctx.save();
-      ctx.font = `${Math.max(12, Math.round(fontSize * 1.2))}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
       ctx.fillStyle = "white";
       ctx.fillText(dragging.img, gx, gy);
-      ctx.restore();
     }
   }
 
