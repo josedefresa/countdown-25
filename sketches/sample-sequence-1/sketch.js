@@ -5,6 +5,17 @@ import { DragManager } from "../_shared/dragManager.js";
 const { renderer, input, math, run, finish } = createEngine();
 const { ctx, canvas } = renderer;
 
+// helper : convertir clientX/clientY -> coords canvas (pixels bitmap)
+function getCanvasPoint(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
 const physics = new VerletPhysics();
 physics.gravityY = 1000;
 
@@ -43,23 +54,158 @@ chain.bodies[0].isFixed = true;
 let rectDragging = false;
 
 // --- rectangle au bout du fil (top-center fixé, sans rotation) ---
-const rectW = 500; // largeur du rectangle
-const rectH = 1000; // hauteur du rectangle
+// PASSER à let pour pouvoir ajuster la taille si l'image est chargée
+let rectW = 0; // plus de carré visible tant que l'image n'est pas prête
+let rectH = 0; // même chose pour la hauteur
 
-// cible de drag pour la cible du rectangle (sera placée au centre du rectangle)
+// DÉCLARATION DE rectDragTarget AVANT TOUT USAGE (pointerdown, etc.)
 const rectDragTarget = {
-  // position = centre du rectangle
   positionX: chain.bodies[chain.bodies.length - 1].positionX,
   positionY: chain.bodies[chain.bodies.length - 1].positionY + rectH / 2,
-  isFixed: false,
-
-  // hit test : true si (x,y) est à l'intérieur du rectangle
   contains(x, y) {
     const left = this.positionX - rectW / 2;
     const top = this.positionY - rectH / 2;
     return x >= left && x <= left + rectW && y >= top && y <= top + rectH;
   },
 };
+
+// récupérer l'image punchbag (assure-toi d'avoir <img id="punchbag_01" ...> dans index.html)
+const punchImg = document.getElementById("punchbag_01");
+let punchClickCount = 0;
+let punchDetached = false;
+let punchLanded = false;
+const punchPhysics = {
+  x: 0,
+  y: 0,
+  vx: 0,
+  vy: 0,
+};
+
+// resize punch dimensions quand l'image charge
+if (punchImg) {
+  const applySize = () => {
+    const maxScale = 0.8;
+    const scale = Math.min(
+      maxScale,
+      Math.max(
+        0.25,
+        Math.min(
+          canvas.width / 2 / punchImg.naturalWidth,
+          canvas.height / 2 / punchImg.naturalHeight
+        )
+      )
+    );
+    rectW = Math.round(punchImg.naturalWidth * scale);
+    rectH = Math.round(punchImg.naturalHeight * scale);
+
+    // initialiser position physique au bout du fil si pas encore détaché
+    const last = chain.bodies[chain.bodies.length - 1];
+    punchPhysics.x = last.positionX;
+    punchPhysics.y = last.positionY;
+  };
+  if (punchImg.complete && punchImg.naturalWidth > 0) {
+    applySize();
+  } else {
+    punchImg.onload = () => applySize();
+    punchImg.onerror = () =>
+      console.warn("punchbag_01 failed to load:", punchImg?.src);
+  }
+}
+
+// compteur de clics après atterrissage et état de la punchbag (1..5)
+let postLandClickCount = 0;
+let punchStage = 1; // 1 = punchbag_01, 2 = punchbag_02, 3 = punchbag_03, 4 = punchbag_04, 5 = punchbag_05
+
+// seuils pour passer au stage suivant
+const STAGE_THRESHOLDS = {
+  1: 3,   // 1 -> 2 après 3 clics
+  2: 5,   // 2 -> 3 après 5 clics
+  3: 10,  // 3 -> 4 après 10 clics
+  4: 5,   // 4 -> 5 après 5 clics
+};
+
+// helper pour swap d'image en fonction du stage
+function swapToStage(stage) {
+  if (stage <= punchStage || stage < 2 || stage > 5) return;
+  const id = `punchbag_0${stage}`;
+  const altEl = document.getElementById(id);
+  if (altEl) {
+    punchImg.src = altEl.src;
+  } else if (typeof punchImg.src === "string") {
+    punchImg.src = punchImg.src.replace(/punchbag_\d+/, id);
+  }
+  punchStage = stage;
+  postLandClickCount = 0;
+  punchImg.onload = () => {
+    const maxScale = 0.8;
+    const scale = Math.min(
+      maxScale,
+      Math.max(
+        0.25,
+        Math.min(
+          canvas.width / 2 / punchImg.naturalWidth,
+          canvas.height / 2 / punchImg.naturalHeight
+        )
+      )
+    );
+    rectW = Math.round(punchImg.naturalWidth * scale);
+    rectH = Math.round(punchImg.naturalHeight * scale);
+    if (punchLanded) {
+      punchPhysics.y = canvas.height - rectH;
+    }
+  };
+  console.log(`Punchbag changed to stage ${stage}`);
+}
+
+// listener pour compter les clics sur la punchbag (zone canvas)
+canvas.addEventListener("pointerdown", (e) => {
+  const p = getCanvasPoint(e.clientX, e.clientY);
+
+  // avant détachement : compteur principal (10 clics) pour décrocher
+  if (!punchDetached) {
+    if (rectDragTarget && rectDragTarget.contains(p.x, p.y)) {
+      punchClickCount++;
+      console.log("punch clicks (pre-detach):", punchClickCount);
+      if (punchClickCount >= 10) detachChainAndPunch();
+    }
+    return;
+  }
+
+  // après détachement : n'accepter les clics que si l'image est atterrie
+  if (punchDetached && punchLanded) {
+    const left = punchPhysics.x - rectW / 2;
+    const top = punchPhysics.y;
+    if (p.x >= left && p.x <= left + rectW && p.y >= top && p.y <= top + rectH) {
+      postLandClickCount++;
+      console.log("punch clicks (post-land):", postLandClickCount, "stage:", punchStage);
+
+      const threshold = STAGE_THRESHOLDS[punchStage];
+      if (threshold && postLandClickCount >= threshold) {
+        swapToStage(punchStage + 1);
+      }
+    }
+  }
+});
+
+// fonction de détachement
+function detachChainAndPunch() {
+  if (punchDetached) return;
+  punchDetached = true;
+  // libérer l'ancrage du haut de la chaîne
+  if (chain && chain.bodies && chain.bodies.length > 0) {
+    chain.bodies[0].isFixed = false;
+    // s'assurer que le dernier maillon n'est pas fixé
+    chain.bodies[chain.bodies.length - 1].isFixed = false;
+  }
+  // initialiser la physique simple pour la punchbag à la position actuelle visible
+  const last = chain.bodies[chain.bodies.length - 1];
+  punchPhysics.x = last.positionX;
+  punchPhysics.y = last.positionY; // top of image will be at this y
+  punchPhysics.vx = 0;
+  punchPhysics.vy = 0;
+
+  console.log("Punchbag detached — chain and image now fall");
+}
 
 // --- créer d'abord le drag object du rectangle (priorité dans l'ordre d'enregistrement) ---
 dragManager.createDragObject({
@@ -115,8 +261,13 @@ for (const o of chain.bodies) {
 run(update);
 
 function update(deltaTime) {
+  // permettre à la chaîne de tomber sous le canvas quand elle est détachée
+  // (le punchbag continue de "lander" au bas visible du canvas)
+  const extraFall = punchDetached
+    ? Math.max(rectH || 0, CHAIN_LENGTH_PX || 0) + 200
+    : 0;
   physics.bounds = {
-    bottom: canvas.height,
+    bottom: canvas.height + extraFall,
   };
 
   const lastBody = chain.bodies[chain.bodies.length - 1];
@@ -159,6 +310,27 @@ function update(deltaTime) {
     last.positionY = rectDragTarget.positionY - rectH / 2;
   }
 
+  // si punch détachée, simuler sa chute (simple intégrateur)
+  if (punchDetached && !punchLanded) {
+    const g = physics.gravityY || 1000; // px/s^2
+    // integrate velocity
+    punchPhysics.vy += g * deltaTime;
+    // integrate position
+    punchPhysics.y += punchPhysics.vy * deltaTime;
+    punchPhysics.x += punchPhysics.vx * deltaTime;
+
+    // collision avec le bas du canvas : on plaque l'image et on stoppe la vélocité
+    const bottomY = canvas.height;
+    const imageBottom = punchPhysics.y + rectH;
+    if (imageBottom >= bottomY) {
+      punchPhysics.y = bottomY - rectH;
+      punchPhysics.vy = 0;
+      punchPhysics.vx = 0;
+      punchLanded = true;
+      console.log("Punchbag landed");
+    }
+  }
+
   physics.update(deltaTime);
 
   // dessin (inchangé)
@@ -178,12 +350,29 @@ function update(deltaTime) {
   }
   ctx.stroke();
 
-  // dessiner le rectangle (top-center fixé au lastBody)
+  // dessiner le rectangle / punchbag :
   const rx = lastBody.positionX - rectW / 2;
   const ry = lastBody.positionY; // bord supérieur = point d'ancrage
-  ctx.fillStyle = "white";
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = 4;
-  ctx.fillRect(rx, ry, rectW, rectH);
-  ctx.strokeRect(rx, ry, rectW, rectH);
+
+  if (
+    punchImg &&
+    punchImg.complete &&
+    punchImg.naturalWidth > 0 &&
+    rectW > 0 &&
+    rectH > 0
+  ) {
+    if (!punchDetached) {
+      // image accrochée : dessiner top-center au lastBody (comme avant)
+      ctx.drawImage(punchImg, rx, ry, rectW, rectH);
+    } else {
+      // punch détachée : dessiner selon punchPhysics (reste droite, pas de rotation)
+      ctx.drawImage(
+        punchImg,
+        punchPhysics.x - rectW / 2,
+        punchPhysics.y,
+        rectW,
+        rectH
+      );
+    }
+  }
 }
