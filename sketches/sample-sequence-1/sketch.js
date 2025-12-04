@@ -127,7 +127,7 @@ const STAGE_THRESHOLDS = {
 
 // helper pour swap d'image en fonction du stage
 function swapToStage(stage) {
-  if (stage <= punchStage || stage < 2 || stage > 6) return; // autoriser jusqu'à 6
+  if (stage <= punchStage || stage < 2 || stage > 6) return;
   const id = `punchbag_0${stage}`;
   const altEl = document.getElementById(id);
   if (altEl) {
@@ -156,6 +156,11 @@ function swapToStage(stage) {
     }
   };
   console.log(`Punchbag changed to stage ${stage}`);
+
+  // quand on affiche punchbag_06 (stage 6) on considère l'animation terminée et on schedule le reset
+  if (stage === 6) {
+    scheduleAutoReset();
+  }
 }
 
 // listener pour compter les clics sur la punchbag (zone canvas)
@@ -414,4 +419,30 @@ function update(deltaTime) {
 
     ctx.drawImage(gloveImg, gx, gy, gw, gh);
   }
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "f" || e.key === "F") {
+    finish();
+  }
+});
+
+// délai avant reset automatique (ms)
+const AUTO_RESET_DELAY = 5000;
+let autoResetTimer = null;
+
+function resetCanvas() {
+  // reset simple : recharger la page — remplace si tu as une fonction de reset propre
+  window.location.reload();
+}
+
+function scheduleAutoReset() {
+  // finish after a short delay for la mise en scène, then schedule full reset
+  setTimeout(() => {
+    finish();
+  }, 2000);
+
+  console.log("Scheduling auto-reset in", AUTO_RESET_DELAY, "ms");
+  if (autoResetTimer) clearTimeout(autoResetTimer);
+  autoResetTimer = setTimeout(resetCanvas, AUTO_RESET_DELAY);
 }
