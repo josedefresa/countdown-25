@@ -118,15 +118,16 @@ let punchStage = 1; // 1 = punchbag_01, 2 = punchbag_02, 3 = punchbag_03, 4 = pu
 
 // seuils pour passer au stage suivant
 const STAGE_THRESHOLDS = {
-  1: 3,   // 1 -> 2 après 3 clics
-  2: 5,   // 2 -> 3 après 5 clics
-  3: 10,  // 3 -> 4 après 10 clics
-  4: 5,   // 4 -> 5 après 5 clics
+  1: 3, // 1 -> 2 après 3 clics
+  2: 5, // 2 -> 3 après 5 clics
+  3: 10, // 3 -> 4 après 10 clics
+  4: 5, // 4 -> 5 après 5 clics
+  5: 1, // 5 -> 6 après 1 clic  <-- ajouté
 };
 
 // helper pour swap d'image en fonction du stage
 function swapToStage(stage) {
-  if (stage <= punchStage || stage < 2 || stage > 5) return;
+  if (stage <= punchStage || stage < 2 || stage > 6) return; // autoriser jusqu'à 6
   const id = `punchbag_0${stage}`;
   const altEl = document.getElementById(id);
   if (altEl) {
@@ -175,9 +176,19 @@ canvas.addEventListener("pointerdown", (e) => {
   if (punchDetached && punchLanded) {
     const left = punchPhysics.x - rectW / 2;
     const top = punchPhysics.y;
-    if (p.x >= left && p.x <= left + rectW && p.y >= top && p.y <= top + rectH) {
+    if (
+      p.x >= left &&
+      p.x <= left + rectW &&
+      p.y >= top &&
+      p.y <= top + rectH
+    ) {
       postLandClickCount++;
-      console.log("punch clicks (post-land):", postLandClickCount, "stage:", punchStage);
+      console.log(
+        "punch clicks (post-land):",
+        postLandClickCount,
+        "stage:",
+        punchStage
+      );
 
       const threshold = STAGE_THRESHOLDS[punchStage];
       if (threshold && postLandClickCount >= threshold) {
@@ -258,6 +269,16 @@ for (const o of chain.bodies) {
   });
 }
 
+// Curseur personnalisé (Glove)
+const GLOVE_SIZE_PX = 128; // <-- change la taille du curseur ici
+const gloveImg = document.getElementById("glove"); // ajouter <img id="glove" src="./assets/Glove.png" style="display:none">
+if (gloveImg) gloveImg.style.display = "none";
+// cacher le curseur natif sur le canvas
+canvas.style.cursor = "none";
+
+// position du pointeur en coords canvas (mise à jour chaque frame)
+const pointerPos = { x: -9999, y: -9999 };
+
 run(update);
 
 function update(deltaTime) {
@@ -293,6 +314,10 @@ function update(deltaTime) {
     px = (inX - rect.left) * (canvas.width / rect.width);
     py = (inY - rect.top) * (canvas.height / rect.height);
   }
+
+  // mettre à jour la position globale du pointeur (utilisée pour dessiner le glove)
+  pointerPos.x = px;
+  pointerPos.y = py;
 
   // IMPORTANT: mettre à jour la position de la target du rectangle AVANT le hit test
   if (!rectDragging) {
@@ -374,5 +399,19 @@ function update(deltaTime) {
         rectH
       );
     }
+  }
+
+  // dessiner le curseur gant (en dernier, au dessus de tout)
+  if (gloveImg && gloveImg.complete && gloveImg.naturalWidth > 0) {
+    // calculer taille en respectant le ratio de l'image
+    const scale = GLOVE_SIZE_PX / gloveImg.naturalWidth;
+    const gw = Math.max(1, Math.round(gloveImg.naturalWidth * scale));
+    const gh = Math.max(1, Math.round(gloveImg.naturalHeight * scale));
+
+    // offset centré (tu peux ajuster ici si tu veux que le doigt pointe ailleurs)
+    const gx = Math.round(pointerPos.x - gw / 2);
+    const gy = Math.round(pointerPos.y - gh / 2);
+
+    ctx.drawImage(gloveImg, gx, gy, gw, gh);
   }
 }
