@@ -1,44 +1,73 @@
-import { createEngine } from "../_shared/engine.js"
-import { Spring } from "../_shared/spring.js"
+import { createEngine } from "../_shared/engine.js";
+import { VerletPhysics } from "../_shared/verletPhysics.js";
+import { DragManager } from "../_shared/dragManager.js";
 
-const { renderer, input, math, run, finish, } = createEngine()
-const { ctx, canvas } = renderer
-run(update)
+const { renderer, input, math, run, finish } = createEngine();
+const { ctx, canvas } = renderer;
 
-const spring = new Spring({
-	position: -canvas.width,
-	frequency: 0.50,
-	halfLife: 0.3
-})
+const physics = new VerletPhysics();
+physics.gravityY = 2000;
 
+const dragManager = new DragManager();
 
-function update(dt) {
+// CHAIN
+const chain = physics.createChain({
+  startPositionX: canvas.width / 2,
+  startPositionY: 0,
+  endPositionX: canvas.width / 2 + 40,
+  endPositionY: canvas.height / 2,
+  elementCount: 16,
+  linkOptions: {
+    //mode: VerletMode.Pull,
+    stiffness: 1,
+  },
+  bodyOptions: {
+    drag: 0.1,
+    radius: 50,
+  },
+});
 
-	if (input.isPressed()) {
-		spring.target = canvas.width
-	}
-	else {
-		spring.target = 0
-	}
+chain.bodies[0].isFixed = true;
 
-	spring.step(dt)
+for (const o of chain.bodies) {
+  dragManager.createDragObject({
+    target: o,
+    onStartDrag: (o) => {
+      o.isFixed = true;
+    },
+    onStopDrag: (o) => {
+      o.isFixed = false;
+    },
+  });
+}
 
-	const x = canvas.width / 2 + spring.position;
-	const y = canvas.height / 2;
+run(update);
 
-	ctx.fillStyle = "black"
-	ctx.fillRect(0, 0, canvas.width, canvas.height)
+function update(deltaTime) {
+  physics.bounds = {
+    bottom: canvas.height,
+  };
 
-	ctx.fillStyle = "white"
-	ctx.textBaseline = "middle"
-	ctx.font = `${canvas.height}px Helvetica Neue, Helvetica , bold`
-	ctx.textAlign = "center"
-	ctx.translate(x, y)
-	ctx.rotate(math.toRadian(-spring.velocity * 0.03))
-	ctx.fillText("1", 0, 0)
+  dragManager.update(input.getX(), input.getY(), input.isPressed());
+  physics.update(deltaTime);
 
-	if (spring.position >= canvas.width - 10) {
-		finish()
-	}
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = "white";
+  ctx.lineJoin = "round";
+
+  ctx.beginPath();
+  const firstBody = chain.bodies[0];
+  ctx.moveTo(firstBody.positionX, firstBody.positionY);
+  for (const body of chain.bodies) {
+    ctx.lineTo(body.positionX, body.positionY);
+  }
+  const lastBody = chain.bodies[chain.bodies.length - 1];
+  ctx.lineTo(lastBody.positionX, lastBody.positionY);
+  ctx.stroke();
+
+  // debug visualization
+  //physics.displayDebug()
 }
