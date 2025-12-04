@@ -52,6 +52,43 @@ for (const o of chain.bodies) {
   });
 }
 
+// --- rectangle au bout du fil (top-center fixé, sans rotation) ---
+const rectW = 500; // largeur du rectangle
+const rectH = 1000; // hauteur du rectangle
+
+// cible de drag pour la cible du rectangle (sera placée au centre du rectangle)
+const rectDragTarget = {
+  // position = centre du rectangle
+  positionX: chain.bodies[chain.bodies.length - 1].positionX,
+  positionY: chain.bodies[chain.bodies.length - 1].positionY + rectH / 2,
+  isFixed: false,
+
+  // hit test : true si (x,y) est à l'intérieur du rectangle
+  contains(x, y) {
+    const left = this.positionX - rectW / 2;
+    const top = this.positionY - rectH / 2;
+    return x >= left && x <= left + rectW && y >= top && y <= top + rectH;
+  },
+};
+
+let rectDragging = false;
+
+// créer un drag object pour la cible du rectangle
+dragManager.createDragObject({
+  target: rectDragTarget,
+  // certains DragManager attendent un hitTest séparé ; on le fournit au cas où
+  hitTest: (x, y) => rectDragTarget.contains(x, y),
+  onStartDrag: () => {
+    rectDragging = true;
+    // verrouiller temporairement le dernier maillon pour éviter la physique qui l'écrase
+    chain.bodies[chain.bodies.length - 1].isFixed = true;
+  },
+  onStopDrag: () => {
+    rectDragging = false;
+    chain.bodies[chain.bodies.length - 1].isFixed = false;
+  },
+});
+
 run(update);
 
 function update(deltaTime) {
@@ -59,9 +96,29 @@ function update(deltaTime) {
     bottom: canvas.height,
   };
 
+  const lastBody = chain.bodies[chain.bodies.length - 1];
+
+  // --- IMPORTANT : synchroniser la target du rectangle AVANT le hit test ---
+  // si on ne draggue pas, setter la cible sur la position visible du dernier maillon
+  if (!rectDragging) {
+    rectDragTarget.positionX = lastBody.positionX;
+    rectDragTarget.positionY = lastBody.positionY + rectH / 2;
+  }
+
+  // mettre à jour le drag manager (il utilisera rectDragTarget pour le hitTest)
   dragManager.update(input.getX(), input.getY(), input.isPressed());
+
+  // si on draggue le rectangle, synchroniser la position du dernier maillon AVANT la mise à jour physique
+  if (rectDragging) {
+    const last = chain.bodies[chain.bodies.length - 1];
+    // on veut que lastBody soit au top-center du rectangle :
+    last.positionX = rectDragTarget.positionX;
+    last.positionY = rectDragTarget.positionY - rectH / 2;
+  }
+
   physics.update(deltaTime);
 
+  // dessin (inchangé)
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -69,38 +126,21 @@ function update(deltaTime) {
   ctx.strokeStyle = "white";
   ctx.lineJoin = "round";
 
+  // dessiner la chaîne
   ctx.beginPath();
   const firstBody = chain.bodies[0];
   ctx.moveTo(firstBody.positionX, firstBody.positionY);
   for (const body of chain.bodies) {
     ctx.lineTo(body.positionX, body.positionY);
   }
-  const lastBody = chain.bodies[chain.bodies.length - 1];
-  ctx.lineTo(lastBody.positionX, lastBody.positionY);
   ctx.stroke();
 
-  // --- rectangle au bout du fil (top-center fixé, sans rotation) ---
-  {
-    const rectW = 40; // largeur du rectangle
-    const rectH = 80; // hauteur du rectangle
-
-    // positionner le rectangle de sorte que son bord supérieur soit au dernier maillon
-    const rx = lastBody.positionX - rectW / 2;
-    const ry = lastBody.positionY; // bord supérieur = point d'ancrage
-
-    ctx.fillStyle = "white";
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 4;
-    ctx.fillRect(rx, ry, rectW, rectH);
-    ctx.strokeRect(rx, ry, rectW, rectH);
-
-    // petit point d'ancrage visible au top-center
-    ctx.fillStyle = "black";
-    ctx.beginPath();
-    ctx.arc(lastBody.positionX, lastBody.positionY, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // debug visualization
-  //physics.displayDebug()
+  // dessiner le rectangle (top-center fixé au lastBody)
+  const rx = lastBody.positionX - rectW / 2;
+  const ry = lastBody.positionY; // bord supérieur = point d'ancrage
+  ctx.fillStyle = "white";
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 4;
+  ctx.fillRect(rx, ry, rectW, rectH);
+  ctx.strokeRect(rx, ry, rectW, rectH);
 }

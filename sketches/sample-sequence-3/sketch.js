@@ -1,13 +1,5 @@
 import { createEngine } from "../_shared/engine.js";
 
-// Nouvelle version : balle 16-bit draggable + trail + rebonds.
-// - Drag & throw, rebonds contre le canvas
-// - Si elle s'arrête, retour à la position de base
-// - Rebonds contre le bas plus "puissants"
-// - Trainée moins lumineuse que la balle
-// - Le "3" est créé à partir de la trainée entre 1er et 3ème rebond,
-//   puis l'animation de redressement se joue.
-
 const { renderer, run } = createEngine();
 const { ctx, canvas } = renderer;
 
