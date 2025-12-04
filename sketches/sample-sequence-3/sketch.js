@@ -1,6 +1,6 @@
 import { createEngine } from "../_shared/engine.js";
 
-const { renderer, run } = createEngine();
+const { renderer, run, finish } = createEngine();
 const { ctx, canvas } = renderer;
 
 run(update);
@@ -379,7 +379,17 @@ function resetCanvas() {
   ball.vy = 0;
 }
 
+window.addEventListener("keydown", (e) => {
+  if (e.key === "f" || e.key === "F") {
+    finish();
+  }
+});
+
 function scheduleAutoReset() {
+  setTimeout(() => {
+    finish();
+  }, 2000);
+  console.log("Scheduling auto-reset in", AUTO_RESET_DELAY, "ms");
   if (autoResetTimer) clearTimeout(autoResetTimer);
   autoResetTimer = setTimeout(resetCanvas, AUTO_RESET_DELAY);
 }

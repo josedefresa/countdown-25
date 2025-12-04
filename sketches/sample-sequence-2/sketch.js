@@ -511,6 +511,7 @@ function update(dt) {
     switch (currentState) {
       case State.Finished:
         //finish();
+        console.log("Animation finished");
         break;
       case State.Falling:
         scaleSpring.target = 1.2;
@@ -612,4 +613,42 @@ function update(dt) {
   }
 
   ctx.restore();
+
+  checkCompleteAndFinish();
 }
+
+// retourne true si toutes les cases ayant un finalType de movableKeys sont en place (v2/locked)
+function allCellsPlaced() {
+  for (let i = 1; i <= TOTAL; i++) {
+    const expected = indexTypeMap[i];
+    if (!expected) continue; // pas d'image attendue ici
+    if (!movableKeys.has(expected)) continue; // on ne vérifie que les routes/tunnels
+    const cell = cellContent[i];
+    if (!cell || cell.type !== "image") return false;
+    // base sans suffixe v2
+    const base = cell.img.endsWith("v2") ? cell.img.slice(0, -2) : cell.img;
+    if (base !== expected) return false;
+    if (!cell.locked) return false; // doit être verrouillée après conversion en v2
+  }
+  return true;
+}
+
+// appeler la vérification depuis update() (par ex. à la fin) :
+function checkCompleteAndFinish() {
+  if (allCellsPlaced()) {
+    console.log("Toutes les cases sont à leur place !");
+    setTimeout(() => {
+      console.log("Animation will finish in 2 seconds...");
+      finish();
+    }, 2000);
+    currentState = State.Finished; // ou autre action : afficher message / bloquer interactions
+    // optionnel : faire quelque chose une seule fois
+    // finish(); // si tu veux terminer proprement
+  }
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "f" || e.key === "F") {
+    finish();
+  }
+});

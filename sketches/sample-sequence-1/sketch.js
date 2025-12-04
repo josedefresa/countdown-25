@@ -40,17 +40,7 @@ const chain = physics.createChain({
 
 chain.bodies[0].isFixed = true;
 
-for (const o of chain.bodies) {
-  dragManager.createDragObject({
-    target: o,
-    onStartDrag: (o) => {
-      o.isFixed = true;
-    },
-    onStopDrag: (o) => {
-      o.isFixed = false;
-    },
-  });
-}
+let rectDragging = false;
 
 // --- rectangle au bout du fil (top-center fixé, sans rotation) ---
 const rectW = 500; // largeur du rectangle
@@ -71,7 +61,42 @@ const rectDragTarget = {
   },
 };
 
-let rectDragging = false;
+// hit margin pour éviter le flicker quand on frôle le bord
+const RECT_HIT_MARGIN = 6;
+
+// --- création des drag objects pour les maillons : ajouter un hitTest priorisant le rectangle ---
+for (const o of chain.bodies) {
+  dragManager.createDragObject({
+    target: o,
+    // n'autorise pas le drag du maillon si le pointeur est dans la zone du rectangle
+    hitTest: (x, y) => {
+      // x,y fournis par dragManager sont en coords canvas (voir update() ci‑dessous)
+      if (rectDragTarget && rectDragTarget.contains) {
+        // utiliser une marge pour stabiliser le hit test
+        const left = rectDragTarget.positionX - rectW / 2 - RECT_HIT_MARGIN;
+        const top = rectDragTarget.positionY - rectH / 2 - RECT_HIT_MARGIN;
+        if (
+          x >= left &&
+          x <= left + rectW + RECT_HIT_MARGIN * 2 &&
+          y >= top &&
+          y <= top + rectH + RECT_HIT_MARGIN * 2
+        ) {
+          return false;
+        }
+      }
+      const dx = x - o.positionX;
+      const dy = y - o.positionY;
+      const r = o.radius || 20;
+      return dx * dx + dy * dy <= r * r;
+    },
+    onStartDrag: (o) => {
+      o.isFixed = true;
+    },
+    onStopDrag: (o) => {
+      o.isFixed = false;
+    },
+  });
+}
 
 // créer un drag object pour la cible du rectangle
 dragManager.createDragObject({
@@ -80,6 +105,7 @@ dragManager.createDragObject({
   hitTest: (x, y) => rectDragTarget.contains(x, y),
   onStartDrag: () => {
     rectDragging = true;
+    console.log("Started dragging rectangle");
     // verrouiller temporairement le dernier maillon pour éviter la physique qui l'écrase
     chain.bodies[chain.bodies.length - 1].isFixed = true;
   },
@@ -97,21 +123,35 @@ function update(deltaTime) {
   };
 
   const lastBody = chain.bodies[chain.bodies.length - 1];
+  const rect = canvas.getBoundingClientRect();
 
-  // --- IMPORTANT : synchroniser la target du rectangle AVANT le hit test ---
-  // si on ne draggue pas, setter la cible sur la position visible du dernier maillon
-  if (!rectDragging) {
-    rectDragTarget.positionX = lastBody.positionX;
-    rectDragTarget.positionY = lastBody.positionY + rectH / 2;
+  const inX = input.getX();
+  const inY = input.getY();
+
+  // si input renvoie déjà des coords bitmap (0..canvas.width / 0..canvas.height), on les réutilise
+  let px = inX;
+  let py = inY;
+
+  // sinon on convertit depuis les coords client (CSS) en pixels bitmap
+  const looksLikeBitmap =
+    typeof inX === "number" &&
+    typeof inY === "number" &&
+    inX >= 0 &&
+    inY >= 0 &&
+    inX <= canvas.width &&
+    inY <= canvas.height;
+
+  if (!looksLikeBitmap) {
+    px = (inX - rect.left) * (canvas.width / rect.width);
+    py = (inY - rect.top) * (canvas.height / rect.height);
   }
 
-  // mettre à jour le drag manager (il utilisera rectDragTarget pour le hitTest)
-  dragManager.update(input.getX(), input.getY(), input.isPressed());
+  // passer les coords converties au dragManager (hit tests utilisent ces mêmes coords)
+  dragManager.update(px, py, input.isPressed());
 
   // si on draggue le rectangle, synchroniser la position du dernier maillon AVANT la mise à jour physique
   if (rectDragging) {
     const last = chain.bodies[chain.bodies.length - 1];
-    // on veut que lastBody soit au top-center du rectangle :
     last.positionX = rectDragTarget.positionX;
     last.positionY = rectDragTarget.positionY - rectH / 2;
   }

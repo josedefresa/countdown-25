@@ -1,67 +1,62 @@
-import { createAudio } from "./engine/audio.js"
-import { createRenderer } from "./engine/renderer.js"
-import { createInput } from "./engine/input.js"
-import { createLoop } from "./engine/loop.js"
-import { createIframeClient } from "./engine/iframeClient.js"
-import * as math from "./engine/math.js"
+import { createAudio } from "./engine/audio.js";
+import { createRenderer } from "./engine/renderer.js";
+import { createInput } from "./engine/input.js";
+import { createLoop } from "./engine/loop.js";
+import { createIframeClient } from "./engine/iframeClient.js";
+import * as math from "./engine/math.js";
 
 export function createEngine() {
+  const pixelRatio = window.devicePixelRatio;
 
-    const pixelRatio = window.devicePixelRatio
+  const renderer = createRenderer(pixelRatio);
+  document.body.appendChild(renderer.canvas);
+  renderer.resize();
 
-    const renderer = createRenderer(pixelRatio)
-    document.body.appendChild(renderer.canvas)
-    renderer.resize()
+  const audio = createAudio();
+  const input = createInput(pixelRatio);
 
-    const audio = createAudio()
-    const input = createInput(pixelRatio)
+  const iframeClient = createIframeClient();
 
-    const iframeClient = createIframeClient()
-
-
-    let activeLoop;
-    function run(updateFunction) {
-
-        if (activeLoop !== undefined) {
-            throw "Loop already started"
-        }
-
-        activeLoop = createLoop((dt) => {
-
-            if (iframeClient.getState() === iframeClient.STATE.WAITING)
-                return
-
-            renderer.resize()
-            renderer.ctx.reset()
-
-            updateFunction(dt)
-            input.update()
-        })
+  let activeLoop;
+  function run(updateFunction) {
+    if (activeLoop !== undefined) {
+      throw "Loop already started";
     }
 
-    let finished = false
+    activeLoop = createLoop((dt) => {
+      if (iframeClient.getState() === iframeClient.STATE.WAITING) return;
 
-    function finish() {
+      renderer.resize();
+      renderer.ctx.reset();
 
-        if (activeLoop) {
-            activeLoop.stop()
-            activeLoop = undefined
-        }
+      updateFunction(dt);
+      input.update();
+    });
+  }
 
-        if (!finished) {
-            iframeClient.sendFinishSignal()
-            finished = true
-        }
+  let finished = false;
+
+  function finish() {
+    console.log("Finish called");
+
+    if (activeLoop) {
+      activeLoop.stop();
+      activeLoop = undefined;
     }
 
-    return {
-
-        renderer,
-        audio,
-        input,
-        finish,
-        run,
-        math,
-        pixelRatio
+    if (!finished) {
+      iframeClient.sendFinishSignal();
+      finished = true;
     }
+  }
+
+  return {
+    renderer,
+    audio,
+    input,
+    finish,
+    run,
+    math,
+    pixelRatio,
+  };
 }
