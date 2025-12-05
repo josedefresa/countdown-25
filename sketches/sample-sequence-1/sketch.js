@@ -440,7 +440,7 @@ function scheduleAutoReset() {
   // finish after a short delay for la mise en scène, then schedule full reset
   setTimeout(() => {
     finish();
-  }, 2000);
+  }, 3000);
 
   console.log("Scheduling auto-reset in", AUTO_RESET_DELAY, "ms");
   if (autoResetTimer) clearTimeout(autoResetTimer);

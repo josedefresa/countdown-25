@@ -640,7 +640,7 @@ function checkCompleteAndFinish() {
     setTimeout(() => {
       console.log("Animation will finish in 2 seconds...");
       finish();
-    }, 2000);
+    }, 3000);
     currentState = State.Finished; // ou autre action : afficher message / bloquer interactions
     // optionnel : faire quelque chose une seule fois
     // finish(); // si tu veux terminer proprement

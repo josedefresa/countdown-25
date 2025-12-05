@@ -388,7 +388,7 @@ window.addEventListener("keydown", (e) => {
 function scheduleAutoReset() {
   setTimeout(() => {
     finish();
-  }, 2000);
+  }, 3000);
   console.log("Scheduling auto-reset in", AUTO_RESET_DELAY, "ms");
   if (autoResetTimer) clearTimeout(autoResetTimer);
   autoResetTimer = setTimeout(resetCanvas, AUTO_RESET_DELAY);

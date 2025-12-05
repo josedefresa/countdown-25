@@ -4,7 +4,16 @@ import { createSpringSettings, Spring } from "../_shared/spring.js";
 const { renderer, input, math, run, finish } = createEngine();
 const { ctx, canvas } = renderer;
 // array of preloaded images
-const imagePaths = ["./car_01.png", "./car_02.png", "./car_03.png"];
+const imagePaths = [
+  "./car_01.png",
+  "./car_02.png",
+  "./car_03.png",
+  "./car_04.png",
+  "./car_05.png",
+  "./car_06.png",
+  "./car_07.png",
+  "./car_08.png",
+];
 
 const images = [];
 
@@ -35,7 +44,7 @@ drawingCanvas.height = canvas.height;
 const drawingCtx = drawingCanvas.getContext("2d");
 
 let angle = 0;
-let rotationSpeed = 180; // degrees per second
+let rotationSpeed = 120; // degrees per second
 
 const ellipseRadiusX = 400;
 const ellipseRadiusY = 600;
@@ -47,18 +56,41 @@ let carVelocityY = 0;
 let forceMultiplier = 5;
 let damping = 2; // damping coefficient
 
+let lastSector = 6; // par défaut vers le haut
+const DIRECTION_SPEED_THRESHOLD = 20; // px/s : ajuster pour rendre la détection plus/moins sensible
+
 const points = [];
 
 const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 
 //create points on ellipse
-const pointCount = 100;
+const pointCount = 80; //number of points
 for (let i = 0; i < pointCount; i++) {
   const a = (i / pointCount) * Math.PI * 2;
   const x = Math.cos(a) * ellipseRadiusX;
   const y = Math.sin(a) * ellipseRadiusY;
   points.push({ x: centerX + x, y: centerY + y, isActive: false });
+}
+
+// mapping unique (0=right,1=down-right,2=down,3=down-left,4=left,5=up-left,6=up,7=up-right)
+const SECTOR_TO_IMAGE_INDEX = [6, 5, 4, 3, 2, 1, 0, 7]; // ajuster si besoin
+
+// --- auto-reset quand tous les points sont activés ---
+let autoResetScheduled = false;
+function allPointsActivated() {
+  for (const p of points) {
+    if (!p.isActive) return false;
+  }
+  return true;
+}
+
+function scheduleAutoReset() {
+  // finish after a short delay for la mise en scène
+  setTimeout(() => {
+    finish();
+  }, 3000);
+  autoResetScheduled = true;
 }
 
 function update(dt) {
@@ -83,27 +115,48 @@ function update(dt) {
     const dx = carX;
     const dy = carY;
     const dist = math.dist(p.x, p.y, carX, carY);
-    const activationDist = 100;
+    const activationDist = 80;
 
     if (dist < activationDist) p.isActive = true;
   }
-  const carAngle = Math.atan2(y - carY, x - carX);
 
-  const selectedImageIndex =
-    Math.floor((angle / 360) * images.length) % images.length;
-  const selectedImage = images[selectedImageIndex];
+  // si toutes les cases sont activées, planifier le reset (une seule fois)
+  if (!autoResetScheduled && allPointsActivated()) {
+    scheduleAutoReset();
+  }
 
-  // draw to drawing canvas
+  // --- déterminer la direction à partir de la vitesse (vx,vy) ---
+  const speed = Math.hypot(carVelocityX, carVelocityY);
+
+  // utiliser la vitesse si suffisante, sinon utiliser la direction vers le pointeur
+  let angleForSector;
+  if (speed >= DIRECTION_SPEED_THRESHOLD) {
+    angleForSector = Math.atan2(carVelocityY, carVelocityX);
+  } else {
+    // réactif : prendre la direction vers la cible (input) quand la voiture est lente
+    angleForSector = Math.atan2(y - carY, x - carX);
+  }
+
+  const angleDeg = (angleForSector * 180) / Math.PI;
+  const angleNorm = (angleDeg + 360) % 360;
+  const sector = Math.round(angleNorm / 45) % 8;
+  lastSector = sector;
+
+  const selectedImage = images[SECTOR_TO_IMAGE_INDEX[sector] || 0];
+
+  // --- dessin ---
+
+  // draw to drawing canvas (conserve effet existant)
   drawingCtx.fillStyle = "white";
 
   drawingCtx.save();
   drawingCtx.translate(carX, carY);
-  drawingCtx.rotate(carAngle);
+  drawingCtx.rotate(Math.atan2(y - carY, x - carX)); // garder si tu veux l'effet déjà présent pour les ellipses
   drawingCtx.beginPath();
-  drawingCtx.ellipse(20, 10, 5, 5, 0, 0, Math.PI * 2);
-  drawingCtx.ellipse(20, -10, 5, 5, 0, 0, Math.PI * 2);
-  drawingCtx.ellipse(-20, 10, 5, 5, 0, 0, Math.PI * 2);
-  drawingCtx.ellipse(-20, -10, 5, 5, 0, 0, Math.PI * 2);
+  drawingCtx.ellipse(20, 15, 5, 5, 0, 0, Math.PI * 2);
+  drawingCtx.ellipse(20, -15, 5, 5, 0, 0, Math.PI * 2);
+  drawingCtx.ellipse(-20, 15, 5, 5, 0, 0, Math.PI * 2);
+  drawingCtx.ellipse(-20, -15, 5, 5, 0, 0, Math.PI * 2);
   drawingCtx.fill();
   drawingCtx.restore();
 
@@ -115,41 +168,40 @@ function update(dt) {
 
   ctx.drawImage(drawingCanvas, 0, 0);
 
-  // ctx.fillStyle = "white";
-  // ctx.beginPath();
-  // ctx.ellipse(x, y, 50, 50, 0, 0, Math.PI * 2);
-  // ctx.fill();
-
   // draw active points
-
   for (const p of points) {
     if (p.isActive) {
-      ctx.fillStyle = "yellow";
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, 10, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillStyle = "white";
+      const s = 50; // taille du carré actif (px)
+      ctx.fillRect(Math.round(p.x - s / 2), Math.round(p.y - s / 2), s, s);
     } else {
       ctx.fillStyle = "gray";
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, 5, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const s = 10; // taille du carré inactif (px)
+      ctx.fillRect(Math.round(p.x - s / 2), Math.round(p.y - s / 2), s, s);
     }
   }
 
-  // draw car
+  // draw car : on ne rotate PAS l'image, on la remplace selon la direction
   ctx.save();
-  ctx.translate(carX, carY);
-  ctx.rotate(carAngle);
-  ctx.fillStyle = "red";
-  const carWidth = 60;
-  const carHeight = 30;
-  ctx.drawImage(
-    selectedImage,
-    -carWidth / 2,
-    -carHeight / 2,
-    carWidth,
-    carHeight
-  );
-  //ctx.fillRect(-carWidth / 2, -carHeight / 2, carWidth, carHeight);
+  const carWidth = 150;
+  const carHeight = 150;
+  if (selectedImage) {
+    ctx.drawImage(
+      selectedImage,
+      Math.round(carX - carWidth / 2),
+      Math.round(carY - carHeight / 2),
+      carWidth,
+      carHeight
+    );
+  } else {
+    // fallback visuel si images pas encore prêtes
+    ctx.fillStyle = "red";
+    ctx.fillRect(
+      Math.round(carX - carWidth / 2),
+      Math.round(carY - carHeight / 2),
+      carWidth,
+      carHeight
+    );
+  }
   ctx.restore();
 }
