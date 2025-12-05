@@ -1,6 +1,7 @@
 import { createEngine } from "../_shared/engine.js";
 
-const { renderer, run, finish } = createEngine();
+// ajouter `audio` depuis l'engine
+const { renderer, run, finish, audio } = createEngine();
 const { ctx, canvas } = renderer;
 
 run(update);
@@ -394,6 +395,30 @@ function scheduleAutoReset() {
   autoResetTimer = setTimeout(resetCanvas, AUTO_RESET_DELAY);
 }
 
+// --- Audio: boings ---
+// Assure-toi que les fichiers existent aux chemins indiqués
+(async () => {
+  try {
+    const boingBottom = await audio.load("Audio/boing_01.mp3");
+    const boingWall = await audio.load("Audio/boing_02.mp3");
+    // expose via closures ou variables externes
+    window._boingBottom = boingBottom;
+    window._boingWall = boingWall;
+  } catch (err) {
+    console.error("Audio load failed:", err);
+  }
+})();
+
+// et dans tes fonctions:
+function playBoingBottom() {
+  if (!window._boingBottom) return;
+  window._boingBottom.play({ rate: 0.95 + Math.random() * 0.1, volume: 0.7 });
+}
+function playBoingWall() {
+  if (!window._boingWall) return;
+  window._boingWall.play({ rate: 0.95 + Math.random() * 0.1, volume: 0.7 });
+}
+
 function update(dt) {
   // dt in seconds
 
@@ -422,6 +447,8 @@ function update(dt) {
       ball.vx = -ball.vx * restitution;
       // touching a non-bottom wall => abort the bottom sequence
       abortRecordingAndResetSequence();
+      // son pour mur (gauche)
+      playBoingWall();
     }
     // right
     if (ball.x + ball.r > W) {
@@ -429,6 +456,8 @@ function update(dt) {
       ball.vx = -ball.vx * restitution;
       // touching a non-bottom wall => abort the bottom sequence
       abortRecordingAndResetSequence();
+      // son pour mur (droite)
+      playBoingWall();
     }
     // top
     if (ball.y - ball.r < 0) {
@@ -436,6 +465,8 @@ function update(dt) {
       ball.vy = -ball.vy * restitution;
       // touching a non-bottom wall => abort the bottom sequence
       abortRecordingAndResetSequence();
+      // son pour mur (haut)
+      playBoingWall();
     }
     // bottom
     const touchingBottom = ball.y + ball.r >= H - 0.5;
@@ -445,6 +476,8 @@ function update(dt) {
         // apply stronger bounce for bottom
         ball.y = H - ball.r;
         ball.vy = -Math.abs(ball.vy) * restitution * bottomBoost;
+        // son pour bas
+        playBoingBottom();
 
         bottomBounces++;
         lastTouchedBottom = true;
