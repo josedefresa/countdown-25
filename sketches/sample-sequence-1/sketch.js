@@ -2,7 +2,7 @@ import { createEngine } from "../_shared/engine.js";
 import { VerletPhysics } from "../_shared/verletPhysics.js";
 import { DragManager } from "../_shared/dragManager.js";
 
-const { renderer, input, math, run, finish } = createEngine();
+const { renderer, input, math, run, finish, audio } = createEngine();
 const { ctx, canvas } = renderer;
 
 // helper : convertir clientX/clientY -> coords canvas (pixels bitmap)
@@ -163,13 +163,40 @@ function swapToStage(stage) {
   }
 }
 
+// --- Audio punch ---
+const punch01 = await audio.load("Audio/punch_01.mp3");
+const punch02 = await audio.load("Audio/punch_02.mp3");
+const punch03 = await audio.load("Audio/punch_03.mp3");
+
+let totalPunchClicks = 0;
+function playPunchSound() {
+  totalPunchClicks++;
+  if (totalPunchClicks <= 10) {
+    // jouer punch_01 pour les 10 premiers clics
+    punch01.play({
+      rate: 0.95 + Math.random() * 0.1,
+      volume: 0.7 + Math.random() * 0.3,
+    });
+  } else {
+    // ensuite: aléatoire entre punch_02 et punch_03
+    const choose = Math.random() < 0.5 ? punch02 : punch03;
+    choose.play({
+      rate: 0.95 + Math.random() * 0.1,
+      volume: 0.7 + Math.random() * 0.3,
+    });
+  }
+}
+
 // listener pour compter les clics sur la punchbag (zone canvas)
 canvas.addEventListener("pointerdown", (e) => {
   const p = getCanvasPoint(e.clientX, e.clientY);
 
-  // avant détachement : compteur principal (10 clics) pour décrocher
+  // avant détachement : clics sur l'image accrochée
   if (!punchDetached) {
     if (rectDragTarget && rectDragTarget.contains(p.x, p.y)) {
+      // audio punch
+      playPunchSound();
+
       punchClickCount++;
       console.log("punch clicks (pre-detach):", punchClickCount);
       if (punchClickCount >= 10) detachChainAndPunch();
@@ -177,7 +204,7 @@ canvas.addEventListener("pointerdown", (e) => {
     return;
   }
 
-  // après détachement : n'accepter les clics que si l'image est atterrie
+  // après détachement : clics sur l'image posée
   if (punchDetached && punchLanded) {
     const left = punchPhysics.x - rectW / 2;
     const top = punchPhysics.y;
@@ -187,6 +214,9 @@ canvas.addEventListener("pointerdown", (e) => {
       p.y >= top &&
       p.y <= top + rectH
     ) {
+      // audio punch
+      playPunchSound();
+
       postLandClickCount++;
       console.log(
         "punch clicks (post-land):",

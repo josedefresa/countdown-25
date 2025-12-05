@@ -1,9 +1,19 @@
 import { createEngine } from "../_shared/engine.js";
 import { Spring } from "../_shared/spring.js";
 
-const { renderer, input, math, run, finish } = createEngine();
+const { renderer, input, math, run, finish, audio } = createEngine();
 const { ctx, canvas } = renderer;
 run(update);
+
+// --- audio: jouer un son lors du drop d'une image ---
+const dropSound = await audio.load("Audio/wood.mp3");
+// helper pour jouer le son (avec légère variation si tu veux)
+function playDrop() {
+  dropSound.play({
+    rate: 0.95 + Math.random() * 0.1,
+    volume: 0.8,
+  });
+}
 
 const ySpring = new Spring({
   position: -canvas.height,
@@ -357,6 +367,9 @@ canvas.addEventListener("pointerup", (e) => {
         // convertir/locker les deux cases impliquées
         convertIfFinal(targetIdx);
         convertIfFinal(dragging.index);
+
+        // jouer le son après un swap
+        playDrop();
       } else {
         // target is number / empty -> move dragged image into target
         cellContent[targetIdx] = {
@@ -369,6 +382,9 @@ canvas.addEventListener("pointerup", (e) => {
 
         // convertir en v2 + lock si c'est la bonne place
         convertIfFinal(targetIdx);
+
+        // jouer le son après un drop simple
+        playDrop();
       }
     }
   }
